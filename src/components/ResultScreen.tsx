@@ -30,7 +30,14 @@ export default function ResultScreen({
   onNextLevel,
 }: ResultScreenProps) {
   const ratio = score / total;
-  const stars = ratio >= 0.9 ? 3 : ratio >= 0.7 ? 2 : ratio >= 0.5 ? 1 : 0;
+  const stars =
+    ratio >= 0.9
+      ? 3
+      : ratio >= 0.7
+        ? 2
+        : ratio >= 0.5
+          ? 1
+          : 0;
 
   const message =
     ratio >= 0.9
@@ -42,7 +49,6 @@ export default function ResultScreen({
           : "Jangan menyerah! Coba lagi ya, petualang!";
 
   useEffect(() => {
-    // Play triumphant level complete fanfare
     sounds.playLevelComplete();
   }, []);
 
@@ -61,12 +67,21 @@ export default function ResultScreen({
     onHome();
   };
 
+  /*
+   * Gambar berada di folder public/.
+   * BASE_URL diperlukan agar gambar tetap tampil
+   * ketika aplikasi dijalankan melalui GitHub Pages.
+   */
+  const baseUrl = import.meta.env.BASE_URL;
+  const trophyImage = `${baseUrl}castle-trophy.png`;
+
   if (allLevelsComplete) {
     return (
       <FinalWinScreen
         onRetry={handleRetry}
         onHome={handleHome}
         score={score}
+        trophyImage={trophyImage}
       />
     );
   }
@@ -115,13 +130,15 @@ export default function ResultScreen({
             Selesai! 🎉
           </h2>
 
-          {/* Parchment score card */}
+          {/* Score card */}
           <div className="parchment mt-5 p-5">
             <div className="flex items-center justify-center gap-2">
               {[1, 2, 3].map((n) => (
                 <span
                   key={n}
-                  className={`big-star ${n <= stars ? "" : "dim"}`}
+                  className={`big-star ${
+                    n <= stars ? "" : "dim"
+                  }`}
                 >
                   ⭐
                 </span>
@@ -130,7 +147,9 @@ export default function ResultScreen({
 
             <div className="mt-3 text-5xl font-black text-amber-900">
               {score}
-              <span className="text-3xl">/{total}</span>
+              <span className="text-3xl">
+                /{total}
+              </span>
             </div>
 
             <p className="mt-1 text-sm font-bold text-amber-800">
@@ -148,10 +167,13 @@ export default function ResultScreen({
               <span
                 key={i}
                 className={`flex h-8 w-8 items-center justify-center rounded-lg text-xs font-black text-white shadow ${
-                  ok ? "bg-emerald-400" : "bg-rose-400"
+                  ok
+                    ? "bg-emerald-400"
+                    : "bg-rose-400"
                 }`}
                 style={{
-                  textShadow: "0 1px 0 rgba(0,0,0,0.3)",
+                  textShadow:
+                    "0 1px 0 rgba(0,0,0,0.3)",
                 }}
               >
                 {i + 1}
@@ -169,6 +191,7 @@ export default function ResultScreen({
           <div className="mt-5 flex flex-col gap-3">
             {hasNext && score >= 6 && (
               <button
+                type="button"
                 className="game-btn btn-yellow w-full px-6 py-3 text-xl"
                 onClick={handleNext}
               >
@@ -177,6 +200,7 @@ export default function ResultScreen({
             )}
 
             <button
+              type="button"
               className="game-btn btn-green w-full px-6 py-3 text-lg"
               onClick={handleRetry}
             >
@@ -184,6 +208,7 @@ export default function ResultScreen({
             </button>
 
             <button
+              type="button"
               className="game-btn btn-blue w-full px-6 py-3 text-lg"
               onClick={handleHome}
             >
@@ -200,19 +225,22 @@ function FinalWinScreen({
   onRetry,
   onHome,
   score,
+  trophyImage,
 }: {
   onRetry: () => void;
   onHome: () => void;
   score: number;
+  trophyImage: string;
 }) {
   return (
     <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-xl flex-col items-center justify-center px-4 py-8">
       <Confetti show />
 
       <div className="fade-up relative w-full text-center">
+
         {/* Trophy image */}
         <img
-          src="/castle-trophy.png"
+          src={trophyImage}
           alt="Piala kemenangan"
           className="mx-auto w-56 object-contain drop-shadow-2xl sm:w-72"
         />
@@ -220,10 +248,12 @@ function FinalWinScreen({
         <h2
           className="mt-2 text-4xl font-black sm:text-5xl"
           style={{
-            background: "linear-gradient(180deg, #fde047, #f59e0b)",
+            background:
+              "linear-gradient(180deg, #fde047, #f59e0b)",
             WebkitBackgroundClip: "text",
             WebkitTextFillColor: "transparent",
-            textShadow: "0 4px 0 rgba(0,0,0,0.15)",
+            textShadow:
+              "0 4px 0 rgba(0,0,0,0.15)",
             filter:
               "drop-shadow(0 4px 6px rgba(0,0,0,0.3))",
           }}
@@ -234,7 +264,8 @@ function FinalWinScreen({
         <p
           className="mt-2 text-lg font-extrabold text-white drop-shadow"
           style={{
-            textShadow: "0 2px 0 rgba(0,0,0,0.4)",
+            textShadow:
+              "0 2px 0 rgba(0,0,0,0.4)",
           }}
         >
           Kamu telah menyelesaikan semua level!
@@ -262,7 +293,8 @@ function FinalWinScreen({
           <p
             className="text-2xl font-black"
             style={{
-              textShadow: "0 2px 0 rgba(0,0,0,0.35)",
+              textShadow:
+                "0 2px 0 rgba(0,0,0,0.35)",
             }}
           >
             Pahlawan Pengurangan!
@@ -274,7 +306,9 @@ function FinalWinScreen({
         </div>
 
         <div className="mt-5 flex flex-col gap-3">
+
           <button
+            type="button"
             className="game-btn btn-yellow w-full px-6 py-3 text-xl"
             onClick={onRetry}
           >
@@ -282,11 +316,13 @@ function FinalWinScreen({
           </button>
 
           <button
+            type="button"
             className="game-btn btn-blue w-full px-6 py-3 text-lg"
             onClick={onHome}
           >
             🏠 Menu
           </button>
+
         </div>
       </div>
     </div>
