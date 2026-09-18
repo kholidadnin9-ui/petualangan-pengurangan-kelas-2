@@ -32,6 +32,12 @@ export default function GameScreen({
   const q = questions[index];
   const isLast = index === questions.length - 1;
 
+  // Base URL untuk GitHub Pages / Vite
+  const baseUrl = import.meta.env.BASE_URL;
+
+  const monkeyPeekImage = `${baseUrl}monkey-peek.png`;
+  const boyCheerImage = `${baseUrl}boy-cheer.png`;
+
   // Shuffle option colors per question
   const optionColors = useMemo(() => {
     const colors = [...OPT_COLORS]
@@ -112,14 +118,15 @@ export default function GameScreen({
   const praise =
     praisePhrases[Math.floor(Math.random() * praisePhrases.length)];
 
-  // Counter: show number of dots up to minuend,
-  // crossed out up to subtrahend for small numbers
+  // Tampilkan titik jika angka pengurang tidak terlalu besar
   const showDots = q.minuend <= 20;
 
   return (
     <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-2xl flex-col px-4 pb-6 pt-4">
+
       {/* Top bar */}
       <div className="flex items-center gap-2">
+
         <button
           className="circle-btn"
           style={{
@@ -135,7 +142,9 @@ export default function GameScreen({
 
         <div className="relative flex-1">
           <div className="wood-plank flex items-center justify-between gap-2 px-4 py-2">
+
             <span className="truncate">
+
               <span className="text-xs opacity-90">
                 Level {level.id}
               </span>
@@ -143,21 +152,28 @@ export default function GameScreen({
               <span className="ml-2 font-black">
                 {level.name}
               </span>
+
             </span>
+
           </div>
         </div>
 
         {/* Star + progress */}
         <div className="mini-stars">
-          <span className="mstar">⭐</span>
+          <span className="mstar">
+            ⭐
+          </span>
+
           <span>
             {index + 1}/{questions.length}
           </span>
         </div>
+
       </div>
 
       {/* Progress bar */}
       <div className="mt-3 flex items-center justify-center gap-1.5">
+
         {questions.map((_, i) => (
           <span
             key={i}
@@ -171,10 +187,12 @@ export default function GameScreen({
                   : "w-3 bg-white/70"
             }`}
             style={{
-              boxShadow: "0 2px 0 rgba(0,0,0,0.15)",
+              boxShadow:
+                "0 2px 0 rgba(0,0,0,0.15)",
             }}
           />
         ))}
+
       </div>
 
       {/* Question board */}
@@ -182,12 +200,15 @@ export default function GameScreen({
         key={q.id}
         className="fade-up mt-4"
       >
+
         <div className="parchment mx-auto w-full max-w-xl text-center">
+
           <p className="text-sm font-extrabold uppercase tracking-wider text-amber-800">
             Berapa hasilnya?
           </p>
 
           <div className="mt-5 flex flex-wrap items-center justify-center gap-3 sm:gap-4">
+
             <div className="equation-num">
               {q.minuend}
             </div>
@@ -225,16 +246,21 @@ export default function GameScreen({
                     : "solid",
               }}
             >
-              {status === "idle" ? "?" : q.answer}
+              {status === "idle"
+                ? "?"
+                : q.answer}
             </div>
+
           </div>
 
           {/* Visual subtraction dots */}
           {showDots && (
             <div className="mt-4 flex max-w-md flex-wrap items-center justify-center gap-1.5">
+
               {Array.from({
                 length: q.minuend,
               }).map((_, i) => (
+
                 <span
                   key={i}
                   className={`inline-block h-4 w-4 rounded-full border-2 ${
@@ -243,22 +269,30 @@ export default function GameScreen({
                       : "border-emerald-700 bg-emerald-400"
                   }`}
                 >
+
                   {i < q.subtrahend && (
                     <span className="flex h-full w-full items-center justify-center text-[10px] font-black text-rose-900">
                       ×
                     </span>
                   )}
+
                 </span>
+
               ))}
+
             </div>
           )}
 
           {/* Answer options */}
           <div className="mt-6 grid grid-cols-3 gap-3">
+
             {q.options.map((opt, oi) => {
-              let cls = `answer-block ${optionColors[oi]}`;
+
+              let cls =
+                `answer-block ${optionColors[oi]}`;
 
               if (status !== "idle") {
+
                 if (opt === q.answer) {
                   cls += " correct";
                 } else if (opt === selected) {
@@ -266,6 +300,7 @@ export default function GameScreen({
                 } else {
                   cls += " dimmed";
                 }
+
               }
 
               return (
@@ -279,15 +314,20 @@ export default function GameScreen({
                   {opt}
                 </button>
               );
+
             })}
+
           </div>
+
         </div>
+
       </div>
 
       {/* Monkey encouragement */}
       <div className="relative mt-4 flex items-end justify-start">
+
         <img
-          src="/monkey-peek.png"
+          src={monkeyPeekImage}
           alt=""
           className="bob relative z-10 w-24 object-contain sm:w-28"
           style={{
@@ -299,11 +339,14 @@ export default function GameScreen({
         <div className="speech-bubble mb-6 ml-2 max-w-[220px] text-sm sm:text-base">
           {encouragement}
         </div>
+
       </div>
 
       {/* Feedback Dialog */}
       {showDialog && (
+
         <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/30 p-4 backdrop-blur-sm sm:items-center">
+
           <div
             className="fade-up relative w-full max-w-md rounded-3xl p-6 pt-2 text-center"
             style={{
@@ -318,17 +361,22 @@ export default function GameScreen({
                 "0 20px 40px rgba(0,0,0,0.35)",
             }}
           >
+
             {/* Boy cheering */}
             {status === "correct" && (
+
               <img
-                src="/boy-cheer.png"
+                src={boyCheerImage}
                 alt=""
                 className="mx-auto -mt-20 w-40 object-contain drop-shadow-xl sm:-mt-24 sm:w-48"
               />
+
             )}
 
             <div className="mb-2 text-5xl drop-shadow-lg sm:text-6xl">
-              {status === "correct" ? "⭐" : "😅"}
+              {status === "correct"
+                ? "⭐"
+                : "😅"}
             </div>
 
             <h2
@@ -351,19 +399,25 @@ export default function GameScreen({
               }}
             >
               {q.minuend} − {q.subtrahend} ={" "}
+
               <span className="text-amber-200">
                 {q.answer}
               </span>
+
             </p>
 
             {status === "correct" ? (
+
               <p className="mb-4 font-bold text-emerald-50/90">
                 {praise}
               </p>
+
             ) : (
+
               <p className="mb-4 font-bold text-rose-50/90">
                 Jangan menyerah, coba perhatikan lagi ya!
               </p>
+
             )}
 
             <button
@@ -379,9 +433,13 @@ export default function GameScreen({
                 ? "Lihat Hasil 🏆"
                 : "Lanjut →"}
             </button>
+
           </div>
+
         </div>
+
       )}
+
     </div>
   );
 }
