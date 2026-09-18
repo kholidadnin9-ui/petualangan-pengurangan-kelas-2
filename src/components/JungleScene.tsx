@@ -1,12 +1,13 @@
-import jungleBg from "../assets/jungle-bg.jpg";
-
 export default function JungleScene() {
   return (
     <>
       <div
         className="jungle-scene"
-        style={{ ["--bg" as string]: `url(${jungleBg})` }}
+        style={{
+          ["--bg" as string]: "url('/jungle-bg.jpg')",
+        }}
       />
+
       <div className="cloud c1" />
       <div className="cloud c2" />
       <div className="cloud c3" />
