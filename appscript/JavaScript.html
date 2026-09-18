@@ -1,0 +1,823 @@
+<script>
+  /* ============================================================
+   *  PETUALANGAN PENGURANGAN - FRONTEND (Vanilla JS)
+   *  Dibuat oleh: Widodo, guru SD
+   *  File ini berjalan di browser (client-side) dan berkomunikasi
+   *  dengan backend Code.gs lewat google.script.run
+   * ============================================================ */
+
+  /* ----------------------------
+     1. DATA LEVEL & SOAL
+  ---------------------------- */
+  var LEVELS = [
+    { id: 1, name: "Hutan Hijau",    emoji: "🌳", minRange: 1,  maxRange: 10, topColor: "#86efac", midColor: "#4ade80", buttonBorder: "#15803d", topEmoji: "🌳🌳🌳" },
+    { id: 2, name: "Sungai Ceria",   emoji: "🌊", minRange: 5,  maxRange: 20, topColor: "#7dd3fc", midColor: "#0ea5e9", buttonBorder: "#075985", topEmoji: "🏝️" },
+    { id: 3, name: "Gua Misteri",    emoji: "💎", minRange: 10, maxRange: 30, topColor: "#c4b5fd", midColor: "#8b5cf6", buttonBorder: "#6b21a8", topEmoji: "🗿" },
+    { id: 4, name: "Puncak Gunung",  emoji: "🏔️", minRange: 15, maxRange: 40, topColor: "#bae6fd", midColor: "#38bdf8", buttonBorder: "#1e40af", topEmoji: "🏔️" },
+    { id: 5, name: "Istana Harta",   emoji: "🏰", minRange: 20, maxRange: 50, topColor: "#fcd34d", midColor: "#f59e0b", buttonBorder: "#b45309", topEmoji: "🏰" },
+  ];
+
+  function getLevel(id) {
+    for (var i = 0; i < LEVELS.length; i++) if (LEVELS[i].id === id) return LEVELS[i];
+    return LEVELS[0];
+  }
+
+  function shuffleArr(arr) {
+    var a = arr.slice();
+    for (var i = a.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var tmp = a[i]; a[i] = a[j]; a[j] = tmp;
+    }
+    return a;
+  }
+
+  function uniqueWrongOptions(correct, count, max) {
+    var opts = {};
+    var size = 0;
+    var attempts = 0;
+    while (size < count && attempts < 100) {
+      attempts++;
+      var offset = Math.floor(Math.random() * 7) - 3;
+      var wrong = correct + offset;
+      if (wrong === correct) wrong = correct + (Math.random() > 0.5 ? 1 : -1);
+      if (wrong < 0) wrong = correct + Math.ceil(Math.random() * 4);
+      if (wrong > max + 5) wrong = Math.max(0, correct - Math.ceil(Math.random() * 4));
+      if (wrong !== correct && wrong >= 0 && !opts[wrong]) { opts[wrong] = true; size++; }
+    }
+    var n = 1;
+    while (size < count) {
+      if (correct + n >= 0 && !opts[correct + n]) { opts[correct + n] = true; size++; }
+      if (size < count && correct - n >= 0 && !opts[correct - n]) { opts[correct - n] = true; size++; }
+      n++;
+    }
+    return Object.keys(opts).map(Number).slice(0, count);
+  }
+
+  function generateQuestions(level, count) {
+    count = count || 10;
+    var questions = [];
+    var seen = {};
+    while (questions.length < count) {
+      var maxM = level.maxRange;
+      var minM = Math.max(level.minRange, 2);
+      var minuend = Math.floor(Math.random() * (maxM - minM + 1)) + minM;
+      var subtrahend = Math.floor(Math.random() * (minuend - 1)) + 1;
+      var answer = minuend - subtrahend;
+      var key = minuend + "-" + subtrahend;
+      if (seen[key] || answer < 0) continue;
+      seen[key] = true;
+      var wrongs = uniqueWrongOptions(answer, 2, level.maxRange);
+      var options = shuffleArr([answer].concat(wrongs));
+      questions.push({ id: questions.length + 1, minuend: minuend, subtrahend: subtrahend, answer: answer, options: options });
+    }
+    return questions;
+  }
+
+  /* ----------------------------
+     2. EFEK SUARA (Web Audio API)
+  ---------------------------- */
+  var sounds = (function () {
+    var ctx = null;
+    var muted = localStorage.getItem("pp_muted") === "1";
+
+    function initCtx() {
+      if (!ctx) {
+        var AudioCtx = window.AudioContext || window.webkitAudioContext;
+        ctx = new AudioCtx();
+      }
+      if (ctx.state === "suspended") ctx.resume();
+    }
+
+    function playClick() {
+      if (muted) return;
+      try {
+        initCtx();
+        var now = ctx.currentTime;
+        var osc = ctx.createOscillator();
+        var gain = ctx.createGain();
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(420, now);
+        osc.frequency.exponentialRampToValueAtTime(780, now + 0.08);
+        gain.gain.setValueAtTime(0.25, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.08);
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.start(now); osc.stop(now + 0.09);
+      } catch (e) {}
+    }
+
+    function playCorrect() {
+      if (muted) return;
+      try {
+        initCtx();
+        var now = ctx.currentTime;
+        var notes = [523.25, 659.25, 783.99, 1046.5];
+        notes.forEach(function (freq, idx) {
+          var osc = ctx.createOscillator();
+          var gain = ctx.createGain();
+          var start = now + idx * 0.07;
+          var end = start + 0.18;
+          osc.type = "triangle";
+          osc.frequency.setValueAtTime(freq, start);
+          gain.gain.setValueAtTime(0.3, start);
+          gain.gain.exponentialRampToValueAtTime(0.005, end);
+          osc.connect(gain); gain.connect(ctx.destination);
+          osc.start(start); osc.stop(end);
+        });
+      } catch (e) {}
+    }
+
+    function playWrong() {
+      if (muted) return;
+      try {
+        initCtx();
+        var now = ctx.currentTime;
+        var osc = ctx.createOscillator();
+        var gain = ctx.createGain();
+        osc.type = "sawtooth";
+        osc.frequency.setValueAtTime(260, now);
+        osc.frequency.exponentialRampToValueAtTime(140, now + 0.28);
+        gain.gain.setValueAtTime(0.2, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.28);
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.start(now); osc.stop(now + 0.3);
+      } catch (e) {}
+    }
+
+    function playLevelComplete() {
+      if (muted) return;
+      try {
+        initCtx();
+        var now = ctx.currentTime;
+        var fanfare = [
+          { f: 523.25, t: 0.0,  d: 0.12 },
+          { f: 523.25, t: 0.14, d: 0.12 },
+          { f: 523.25, t: 0.28, d: 0.12 },
+          { f: 659.25, t: 0.42, d: 0.18 },
+          { f: 783.99, t: 0.62, d: 0.18 },
+          { f: 1046.5, t: 0.82, d: 0.45 },
+        ];
+        fanfare.forEach(function (n) {
+          var osc = ctx.createOscillator();
+          var gain = ctx.createGain();
+          var start = now + n.t;
+          var end = start + n.d;
+          osc.type = "triangle";
+          osc.frequency.setValueAtTime(n.f, start);
+          gain.gain.setValueAtTime(0.35, start);
+          gain.gain.exponentialRampToValueAtTime(0.005, end);
+          osc.connect(gain); gain.connect(ctx.destination);
+          osc.start(start); osc.stop(end);
+        });
+      } catch (e) {}
+    }
+
+    function toggleMute() {
+      muted = !muted;
+      localStorage.setItem("pp_muted", muted ? "1" : "0");
+      return muted;
+    }
+    function isMuted() { return muted; }
+
+    return { playClick: playClick, playCorrect: playCorrect, playWrong: playWrong, playLevelComplete: playLevelComplete, toggleMute: toggleMute, isMuted: isMuted };
+  })();
+
+  /* ----------------------------
+     3. STATE APLIKASI
+  ---------------------------- */
+  var state = {
+    screen: "home", // home | levels | play | result | leaderboard
+    playerName: localStorage.getItem("pp_name") || "",
+    levelId: 1,
+    questions: [],
+    index: 0,
+    score: 0,
+    answers: [],
+    selected: null,
+    status: "idle", // idle | correct | wrong
+    showDialog: false,
+    optionColors: [],
+    bestScores: JSON.parse(localStorage.getItem("pp_best") || "{}"),
+    unlockedLevel: parseInt(localStorage.getItem("pp_unlocked") || "1", 10),
+    justUnlocked: false,
+    finalComplete: false,
+    leaderboard: [],
+  };
+
+  var OPT_COLORS = ["opt-green", "opt-blue", "opt-orange", "opt-purple"];
+
+  function persistLocal() {
+    localStorage.setItem("pp_name", state.playerName);
+    localStorage.setItem("pp_best", JSON.stringify(state.bestScores));
+    localStorage.setItem("pp_unlocked", String(state.unlockedLevel));
+  }
+
+  /* ----------------------------
+     4. KOMUNIKASI DENGAN BACKEND
+  ---------------------------- */
+  function syncFromServer() {
+    if (!state.playerName) return;
+    if (typeof google === "undefined" || !google.script) return;
+    google.script.run
+      .withSuccessHandler(function (res) {
+        if (!res) return;
+        state.bestScores = res.bestScores || state.bestScores;
+        state.unlockedLevel = Math.max(state.unlockedLevel, res.unlockedLevel || 1);
+        persistLocal();
+        if (state.screen === "home" || state.screen === "levels") render();
+      })
+      .withFailureHandler(function () {})
+      .getStudentProgress(state.playerName);
+  }
+
+  function pushScoreToServer(levelObj, score, total, stars) {
+    if (typeof google === "undefined" || !google.script) return;
+    google.script.run
+      .withSuccessHandler(function () {})
+      .withFailureHandler(function () {})
+      .saveScore({
+        name: state.playerName || "Anonim",
+        levelId: levelObj.id,
+        levelName: levelObj.name,
+        score: score,
+        total: total,
+        stars: stars,
+      });
+  }
+
+  function fetchLeaderboard() {
+    if (typeof google === "undefined" || !google.script) {
+      state.leaderboard = [];
+      render();
+      return;
+    }
+    google.script.run
+      .withSuccessHandler(function (res) {
+        state.leaderboard = res || [];
+        render();
+      })
+      .withFailureHandler(function () {
+        state.leaderboard = [];
+        render();
+      })
+      .getLeaderboard();
+  }
+
+  /* ----------------------------
+     5. NAVIGASI & AKSI
+  ---------------------------- */
+  function starsFromScore(score, total) {
+    var ratio = score / total;
+    if (ratio >= 0.9) return 3;
+    if (ratio >= 0.7) return 2;
+    if (ratio >= 0.5) return 1;
+    return 0;
+  }
+
+  function goHome() {
+    sounds.playClick();
+    state.screen = "home";
+    render();
+  }
+
+  function goLevels() {
+    sounds.playClick();
+    state.screen = "levels";
+    render();
+  }
+
+  function goLeaderboard() {
+    sounds.playClick();
+    state.screen = "leaderboard";
+    render();
+    fetchLeaderboard();
+  }
+
+  function startLevel(id) {
+    if (!state.playerName) {
+      alert("Yuk, isi nama kamu dulu di halaman depan! 😊");
+      return;
+    }
+    sounds.playClick();
+    var lv = getLevel(id);
+    state.levelId = id;
+    state.questions = generateQuestions(lv, 10);
+    state.index = 0;
+    state.score = 0;
+    state.answers = [];
+    state.selected = null;
+    state.status = "idle";
+    state.showDialog = false;
+    state.justUnlocked = false;
+    state.finalComplete = false;
+    state.screen = "play";
+    render();
+  }
+
+  function selectAnswer(opt) {
+    if (state.status !== "idle") return;
+    var q = state.questions[state.index];
+    state.selected = opt;
+    if (opt === q.answer) {
+      sounds.playCorrect();
+      state.status = "correct";
+      state.score += 1;
+      state.answers.push(true);
+    } else {
+      sounds.playWrong();
+      state.status = "wrong";
+      state.answers.push(false);
+    }
+    state.showDialog = true;
+    render();
+  }
+
+  function nextQuestion() {
+    sounds.playClick();
+    var isLast = state.index === state.questions.length - 1;
+    if (isLast) {
+      finishLevel();
+      return;
+    }
+    state.index += 1;
+    state.selected = null;
+    state.status = "idle";
+    state.showDialog = false;
+    render();
+  }
+
+  function finishLevel() {
+    var lv = getLevel(state.levelId);
+    var finalScore = state.answers.filter(Boolean).length;
+    var stars = starsFromScore(finalScore, state.questions.length);
+
+    var prevBest = state.bestScores[lv.id] || 0;
+    state.bestScores[lv.id] = Math.max(prevBest, finalScore);
+
+    state.justUnlocked = false;
+    if (finalScore >= 6 && lv.id < 5) {
+      var candidate = lv.id + 1;
+      if (candidate > state.unlockedLevel) {
+        state.unlockedLevel = candidate;
+        state.justUnlocked = true;
+      }
+    }
+    state.finalComplete = lv.id === 5 && finalScore >= 6;
+
+    persistLocal();
+    pushScoreToServer(lv, finalScore, state.questions.length, stars);
+
+    state.score = finalScore;
+    state.screen = "result";
+    render();
+    sounds.playLevelComplete();
+  }
+
+  function retryLevel() {
+    sounds.playClick();
+    startLevel(state.levelId);
+  }
+
+  function nextLevelAction() {
+    sounds.playClick();
+    if (state.levelId < 5) startLevel(state.levelId + 1);
+  }
+
+  function toggleSound() {
+    var muted = sounds.toggleMute();
+    render();
+    if (!muted) sounds.playClick();
+  }
+
+  function handleNameInput(value) {
+    state.playerName = value;
+    persistLocal();
+  }
+
+  function confirmName() {
+    var input = document.getElementById("player-name-input");
+    if (input) {
+      state.playerName = input.value.trim();
+      persistLocal();
+      if (state.playerName) {
+        sounds.playClick();
+        syncFromServer();
+        render();
+      } else {
+        alert("Tuliskan namamu dulu ya, petualang kecil!");
+      }
+    }
+  }
+
+  /* ----------------------------
+     6. RENDER: HOME SCREEN
+  ---------------------------- */
+  function renderHome() {
+    var totalStars = 0;
+    LEVELS.forEach(function (lv) {
+      var best = state.bestScores[lv.id] || 0;
+      totalStars += starsFromScore(best, 10);
+    });
+
+    var nameSection = state.playerName
+      ? '<div class="wood-plank" style="padding:8px 20px;">' +
+        '<div style="font-size:11px;opacity:0.85;">Halo, Pejuang Hebat!</div>' +
+        '<div style="font-size:15px;font-weight:900;">👋 ' + escapeHtml(state.playerName) + '</div>' +
+        "</div>"
+      : "";
+
+    var nameInputSection = !state.playerName
+      ? '<div class="name-input-wrap mt-2">' +
+        '<input id="player-name-input" class="name-input" type="text" placeholder="Tuliskan namamu di sini..." maxlength="24" />' +
+        '<button class="game-btn btn-green small mt-2" onclick="confirmName()">✅ Simpan Nama</button>' +
+        "</div>"
+      : "";
+
+    var html =
+      '<div class="screen">' +
+        '<div class="row-between mt-1">' +
+          '<div class="row gap-2">' + (nameSection || "<div></div>") + "</div>" +
+          '<button class="circle-btn" onclick="toggleSound()" title="Suara">' + (sounds.isMuted() ? "🔇" : "🔊") + "</button>" +
+        "</div>" +
+
+        '<div class="title-board mt-3 fade-up">' +
+          '<span class="wood-nail tl"></span><span class="wood-nail tr"></span>' +
+          '<span class="wood-nail bl"></span><span class="wood-nail br"></span>' +
+          '<h1 class="home-title"><span class="top">🌿 Petualangan 🌿</span>Pengurangan</h1>' +
+          '<div class="created-by-badge"><span>Created by: <b>Widodo guru sd</b></span></div>' +
+          '<p style="margin-top:10px;color:#fff7ed;font-weight:700;font-size:0.95rem;">Ayo selesaikan misi dan taklukkan semua level!</p>' +
+        "</div>" +
+
+        '<div class="characters-row mt-2">' +
+          '<span class="char-explorer bob">🧑\u200d🌾</span>' +
+          '<span class="char-monkey bob-slow">🐒</span>' +
+        "</div>" +
+
+        nameInputSection +
+
+        '<div class="col gap-2 mt-3" style="width:100%;align-items:center;">' +
+          '<div class="info-plank"><span class="icon">⭐</span>5 Level Seru · ' + totalStars + ' Bintang</div>' +
+          '<div class="info-plank"><span class="icon">🏆</span>Belajar Sambil Bermain</div>' +
+          '<div class="info-plank"><span class="icon">❤️</span>Jadi Lebih Hebat!</div>' +
+        "</div>" +
+
+        '<button class="game-btn btn-yellow mt-3" onclick="startLevel(' + state.unlockedLevel + ')"><span>▶</span> Mulai</button>' +
+        '<button class="game-btn btn-orange mt-2" style="margin-top:10px;" onclick="goLevels()">🗺️ Pilih Level</button>' +
+        '<button class="game-btn btn-blue mt-2" style="margin-top:10px;" onclick="goLeaderboard()">🏅 Papan Peringkat</button>' +
+
+        '<p class="mt-3" style="font-size:12px;font-weight:700;color:#064e3b;">Kelas 2 SD · Pengurangan 1–50</p>' +
+      "</div>";
+
+    document.getElementById("app").innerHTML = html;
+
+    var input = document.getElementById("player-name-input");
+    if (input) {
+      input.addEventListener("keydown", function (e) {
+        if (e.key === "Enter") confirmName();
+      });
+    }
+  }
+
+  /* ----------------------------
+     7. RENDER: LEVEL SELECT
+  ---------------------------- */
+  function renderLevels() {
+    var islands = LEVELS.map(function (lv) {
+      var locked = lv.id > state.unlockedLevel;
+      var best = state.bestScores[lv.id] || 0;
+      var stars = starsFromScore(best, 10);
+      var starsHtml = [1, 2, 3].map(function (n) {
+        return '<span class="' + (n <= stars ? "" : "off") + '">⭐</span>';
+      }).join("");
+
+      return (
+        '<button class="island ' + (locked ? "locked" : "") + '" ' +
+        (locked ? "disabled" : 'onclick="startLevel(' + lv.id + ')"') + '>' +
+          '<div class="island-emoji-top">' + lv.topEmoji + "</div>" +
+          '<div class="island-badge">' + (locked ? "🔒" : lv.id) + "</div>" +
+          '<div class="island-top" style="background:linear-gradient(180deg,' + lv.topColor + "," + lv.midColor + ');">' +
+            "<span>" + (locked ? "🔒" : lv.emoji) + "</span>" +
+          "</div>" +
+          '<div class="island-dirt"></div>' +
+          '<div class="island-name" style="background:linear-gradient(180deg,' + lv.midColor + "," + lv.buttonBorder + ');">' + lv.name + "</div>" +
+          '<div class="island-stars">' + starsHtml + "</div>" +
+        "</button>"
+      );
+    }).join("");
+
+    var html =
+      '<div class="screen">' +
+        '<div class="row-between">' +
+          '<button class="circle-btn" onclick="goHome()">←</button>' +
+          '<div class="wood-sign">Pilih Level</div>' +
+          '<div style="width:48px;"></div>' +
+        "</div>" +
+        '<div class="level-grid">' + islands + "</div>" +
+        '<button class="game-btn btn-blue mt-4" onclick="goHome()">🏠 Kembali ke Beranda</button>' +
+      "</div>";
+
+    document.getElementById("app").innerHTML = html;
+  }
+
+  /* ----------------------------
+     8. RENDER: GAME SCREEN
+  ---------------------------- */
+  var encouragements = [
+    "Ayo, kamu pasti bisa!", "Semangat, petualang!", "Fokus ya, kamu hebat!",
+    "Jangan menyerah!", "Kamu pintar, kok!", "Satu soal lagi, yuk!",
+  ];
+  var praisePhrases = ["Kamu hebat!", "Hebat sekali!", "Pintar!", "Luar biasa!", "Betul!", "Mantap!"];
+
+  function renderGame() {
+    var lv = getLevel(state.levelId);
+    var q = state.questions[state.index];
+    var isLast = state.index === state.questions.length - 1;
+
+    if (state.optionColors.length !== 3 || state._lastIndexColored !== state.index) {
+      state.optionColors = shuffleArr(OPT_COLORS).slice(0, 3);
+      state._lastIndexColored = state.index;
+    }
+
+    var progressDots = state.questions.map(function (_, i) {
+      var cls = "pd";
+      if (i < state.index) cls += state.answers[i] ? " done-correct" : " done-wrong";
+      else if (i === state.index) cls += " current";
+      return '<span class="' + cls + '"></span>';
+    }).join("");
+
+    var showDots = q.minuend <= 20;
+    var dotsHtml = "";
+    if (showDots) {
+      var dots = [];
+      for (var i = 0; i < q.minuend; i++) {
+        if (i < q.subtrahend) dots.push('<span class="dot crossed">×</span>');
+        else dots.push('<span class="dot full"></span>');
+      }
+      dotsHtml = '<div class="dots-row mt-2">' + dots.join("") + "</div>";
+    }
+
+    var answerBoxContent = state.status === "idle" ? "?" : q.answer;
+    var answerBoxStyle =
+      state.status === "correct"
+        ? "background:linear-gradient(180deg,#bbf7d0,#4ade80);color:#7c2d12;"
+        : state.status === "wrong"
+        ? "background:linear-gradient(180deg,#fecdd3,#f87171);color:#7c2d12;"
+        : "background:linear-gradient(180deg,#fff,#fef9c3);color:#b45309;";
+
+    var optionsHtml = q.options.map(function (opt, oi) {
+      var cls = "answer-block " + state.optionColors[oi];
+      var disabled = state.status !== "idle";
+      if (disabled) {
+        if (opt === q.answer) cls += " correct";
+        else if (opt === state.selected) cls += " wrong";
+        else cls += " dimmed";
+      }
+      return (
+        '<button class="' + cls + '" ' + (disabled ? "disabled" : "") +
+        ' onclick="selectAnswer(' + opt + ')">' + opt + "</button>"
+      );
+    }).join("");
+
+    var encouragement = encouragements[state.index % encouragements.length];
+
+    var html =
+      '<div class="screen">' +
+        '<div class="row-between gap-2">' +
+          '<button class="circle-btn" onclick="goHome()">←</button>' +
+          '<div class="wood-plank" style="flex:1;text-align:left;">' +
+            '<span style="font-size:11px;opacity:0.85;">Level ' + lv.id + "</span>" +
+            '<span style="margin-left:8px;font-weight:900;">' + lv.name + "</span>" +
+          "</div>" +
+          '<div class="mini-stars"><span>⭐</span><span>' + (state.index + 1) + "/10</span></div>" +
+        "</div>" +
+
+        '<div class="progress-dots">' + progressDots + "</div>" +
+
+        '<div class="fade-up mt-3" style="width:100%;">' +
+          '<div class="parchment">' +
+            '<p class="question-label">Berapa hasilnya?</p>' +
+            '<div class="equation-row">' +
+              '<div class="equation-num">' + q.minuend + "</div>" +
+              '<div class="equation-op">−</div>' +
+              '<div class="equation-num">' + q.subtrahend + "</div>" +
+              '<div class="equation-op">=</div>' +
+              '<div class="equation-num ' + (state.status === "idle" ? "answer-slot" : "") + '" style="' + answerBoxStyle + '">' + answerBoxContent + "</div>" +
+            "</div>" +
+            dotsHtml +
+            '<div class="options-grid">' + optionsHtml + "</div>" +
+          "</div>" +
+        "</div>" +
+
+        '<div class="row gap-2 mt-3" style="width:100%;">' +
+          '<span class="char-monkey bob" style="font-size:44px;">🐒</span>' +
+          '<div class="speech-bubble">' + encouragement + "</div>" +
+        "</div>" +
+      "</div>";
+
+    document.getElementById("app").innerHTML = html;
+
+    if (state.showDialog) {
+      renderFeedbackDialog(q, isLast);
+    }
+  }
+
+  function renderFeedbackDialog(q, isLast) {
+    var ok = state.status === "correct";
+    var praise = praisePhrases[Math.floor(Math.random() * praisePhrases.length)];
+
+    var html =
+      '<div class="overlay" id="feedback-overlay">' +
+        '<div class="feedback-card ' + (ok ? "ok" : "bad") + ' fade-up">' +
+          '<div class="feedback-emoji">' + (ok ? "🎉" : "😅") + "</div>" +
+          '<h2 class="feedback-title">' + (ok ? "Hebat!" : "Ups, kurang tepat!") + "</h2>" +
+          '<p class="feedback-eq">' + q.minuend + " − " + q.subtrahend + " = <b>" + q.answer + "</b></p>" +
+          '<p class="feedback-praise">' + (ok ? praise : "Jangan menyerah, coba perhatikan lagi ya!") + "</p>" +
+          '<button class="game-btn ' + (ok ? "btn-yellow" : "btn-green") + '" onclick="nextQuestion()">' +
+            (isLast ? "Lihat Hasil 🏆" : "Lanjut →") +
+          "</button>" +
+        "</div>" +
+      "</div>";
+
+    var wrap = document.createElement("div");
+    wrap.innerHTML = html;
+    document.body.appendChild(wrap.firstChild);
+  }
+
+  /* ----------------------------
+     9. RENDER: RESULT SCREEN
+  ---------------------------- */
+  function renderResult() {
+    if (state.finalComplete) {
+      renderFinalWin();
+      return;
+    }
+
+    var lv = getLevel(state.levelId);
+    var total = state.questions.length;
+    var ratio = state.score / total;
+    var stars = starsFromScore(state.score, total);
+    var message =
+      ratio >= 0.9 ? "Luar biasa! Kamu jagoan pengurangan!" :
+      ratio >= 0.7 ? "Hebat! Terus berlatih ya!" :
+      ratio >= 0.5 ? "Bagus! Ayo coba lagi agar lebih jago!" :
+      "Jangan menyerah! Coba lagi ya, petualang!";
+
+    var starsHtml = [1, 2, 3].map(function (n) {
+      return '<span class="big-star ' + (n <= stars ? "" : "dim") + '">⭐</span>';
+    }).join("");
+
+    var dotsHtml = state.answers.map(function (ok, i) {
+      return '<span style="background:' + (ok ? "#4ade80" : "#fb7185") + ';">' + (i + 1) + "</span>";
+    }).join("");
+
+    var unlockHtml =
+      state.justUnlocked && lv.id < 5
+        ? '<div class="result-unlock">✨ Level baru terbuka!</div>'
+        : "";
+
+    var nextBtn =
+      lv.id < 5 && state.score >= 6
+        ? '<button class="game-btn btn-yellow mt-2" onclick="nextLevelAction()">Level Berikutnya →</button>'
+        : "";
+
+    var html =
+      '<div class="screen center" style="min-height:100vh;">' +
+        '<div class="result-card title-board fade-up">' +
+          '<span class="wood-nail tl"></span><span class="wood-nail tr"></span>' +
+          '<span class="wood-nail bl"></span><span class="wood-nail br"></span>' +
+          '<p style="margin:0;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#fde68a;">Level ' + lv.id + " · " + lv.name + "</p>" +
+          '<h2 style="margin:4px 0 0;font-size:1.9rem;font-weight:900;color:#fff;text-shadow:0 3px 0 rgba(0,0,0,0.35);">Selesai! 🎉</h2>' +
+
+          '<div class="parchment mt-2" style="padding:20px;">' +
+            '<div class="center gap-1">' + starsHtml + "</div>" +
+            '<div style="margin-top:10px;font-size:2.6rem;font-weight:900;color:#78350f;">' + state.score + '<span style="font-size:1.6rem;">/' + total + "</span></div>" +
+            '<p style="margin:2px 0 0;font-size:0.85rem;font-weight:700;color:#92400e;">jawaban benar</p>' +
+            '<p style="margin-top:10px;font-size:1rem;font-weight:800;color:#78350f;">' + message + "</p>" +
+          "</div>" +
+
+          '<div class="answer-dots">' + dotsHtml + "</div>" +
+          unlockHtml +
+
+          '<div class="col gap-2 mt-3" style="align-items:center;">' +
+            nextBtn +
+            '<button class="game-btn btn-green" onclick="retryLevel()">🔄 Main Lagi</button>' +
+            '<button class="game-btn btn-blue" onclick="goHome()">🏠 Menu</button>' +
+          "</div>" +
+        "</div>" +
+      "</div>";
+
+    document.getElementById("app").innerHTML = html;
+    spawnConfetti(stars >= 2 ? 40 : 0);
+  }
+
+  function renderFinalWin() {
+    var html =
+      '<div class="screen center" style="min-height:100vh;">' +
+        '<div class="result-card text-center fade-up">' +
+          '<div style="font-size:90px;">🏆</div>' +
+          '<h2 style="font-size:2.4rem;font-weight:900;color:#fde047;text-shadow:0 4px 0 rgba(0,0,0,0.25);margin:0;">Selamat!</h2>' +
+          '<p style="color:#fff;font-weight:800;text-shadow:0 2px 0 rgba(0,0,0,0.4);">Kamu telah menyelesaikan semua level!</p>' +
+
+          '<div class="title-board mt-2">' +
+            '<span class="wood-nail tl"></span><span class="wood-nail tr"></span>' +
+            '<span class="wood-nail bl"></span><span class="wood-nail br"></span>' +
+            '<p style="margin:0;font-size:1.1rem;font-weight:900;color:#fff;">🏆 Kamu adalah</p>' +
+            '<p style="margin:2px 0 0;font-size:1.5rem;font-weight:900;color:#fff;text-shadow:0 2px 0 rgba(0,0,0,0.35);">Pahlawan Pengurangan!</p>' +
+            '<p style="margin-top:8px;font-size:0.85rem;font-weight:700;color:#fde68a;">Skor terakhir: ' + state.score + "/10</p>" +
+          "</div>" +
+
+          '<div class="col gap-2 mt-3" style="align-items:center;">' +
+            '<button class="game-btn btn-yellow" onclick="retryLevel()">🔁 Main Lagi</button>' +
+            '<button class="game-btn btn-blue" onclick="goHome()">🏠 Menu</button>' +
+          "</div>" +
+        "</div>" +
+      "</div>";
+
+    document.getElementById("app").innerHTML = html;
+    spawnConfetti(60);
+  }
+
+  /* ----------------------------
+     10. RENDER: LEADERBOARD
+  ---------------------------- */
+  function renderLeaderboard() {
+    var rows = state.leaderboard.length
+      ? state.leaderboard.map(function (item, i) {
+          return (
+            '<div class="leaderboard-row">' +
+              '<span class="row"><span class="rank">' + (i + 1) + "</span>" + escapeHtml(item.name) + "</span>" +
+              "<span>" + item.total + " poin</span>" +
+            "</div>"
+          );
+        }).join("")
+      : '<p class="text-center" style="font-weight:700;color:#065f46;">Belum ada data. Ayo main dulu!</p>';
+
+    var html =
+      '<div class="screen">' +
+        '<div class="row-between">' +
+          '<button class="circle-btn" onclick="goHome()">←</button>' +
+          '<div class="wood-sign" style="font-size:1.5rem;">🏅 Peringkat</div>' +
+          '<div style="width:48px;"></div>' +
+        "</div>" +
+        '<div class="leaderboard-list mt-3">' + rows + "</div>" +
+        '<button class="game-btn btn-blue mt-3" onclick="goHome()">🏠 Kembali ke Beranda</button>' +
+      "</div>";
+
+    document.getElementById("app").innerHTML = html;
+  }
+
+  /* ----------------------------
+     11. CONFETTI
+  ---------------------------- */
+  var CONFETTI_COLORS = ["#fbbf24", "#22c55e", "#0ea5e9", "#ec4899", "#a855f7", "#f97316", "#ef4444"];
+  function spawnConfetti(count) {
+    for (var i = 0; i < count; i++) {
+      (function () {
+        var el = document.createElement("span");
+        el.className = "confetti-piece";
+        el.style.left = Math.random() * 100 + "%";
+        el.style.background = CONFETTI_COLORS[i % CONFETTI_COLORS.length];
+        el.style.transform = "rotate(" + Math.random() * 360 + "deg)";
+        el.style.animationDelay = Math.random() * 1.2 + "s";
+        el.style.animationDuration = (2.2 + Math.random() * 1.6) + "s";
+        document.body.appendChild(el);
+        setTimeout(function () { el.remove(); }, 4200);
+      })();
+    }
+  }
+
+  /* ----------------------------
+     12. UTIL
+  ---------------------------- */
+  function escapeHtml(str) {
+    return String(str)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  /* ----------------------------
+     13. MAIN RENDER DISPATCHER
+  ---------------------------- */
+  function render() {
+    var overlay = document.getElementById("feedback-overlay");
+    if (overlay) overlay.remove();
+
+    switch (state.screen) {
+      case "home": renderHome(); break;
+      case "levels": renderLevels(); break;
+      case "play": renderGame(); break;
+      case "result": renderResult(); break;
+      case "leaderboard": renderLeaderboard(); break;
+      default: renderHome();
+    }
+  }
+
+  /* ----------------------------
+     14. INIT
+  ---------------------------- */
+  document.addEventListener("DOMContentLoaded", function () {
+    render();
+    if (state.playerName) syncFromServer();
+  });
+</script>
